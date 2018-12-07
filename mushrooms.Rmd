@@ -1,0 +1,229 @@
+---
+title: "Cogumelos: Comestível ou Venenoso? Algoritmo KNN para Classificação"
+author: "André Freire"
+date: "6 de dezembro de 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(caTools)
+library(class)
+library(gmodels)
+library(caret)
+library(ggplot2)
+library(randomForest)
+```
+
+![](C:/DataScience/mushroom/im01.png)
+
+## Introdução
+
+Nosso objetivo é criar um modelo preditivo que nos auxiliará na classificação de cogumelos, dizendo se ele é comestível ou venenoso, utilizando aprendizagem supervisionada e o algoritmo KNN (K-Nearest-Neighbor).
+O projeto foi realizado com a linguagem R e alguns de seus pacotes para análise de dados, para a apresentação do trabalho foi utilizado o RMarkdown. 
+
+##Informações sobre o dataset
+
+O conjunto de dados nos fornece informações sobre diferentes características dos cogumelos. Ao longo do trabalho iremos criar um modelo preditivo de classificação, e depois vamos explorar e gerar insights sobre algumas características dos cogumelos. 
+
+Os dados foram obtidos no site "Kaggle", e para maiores informações sobre o dataset, visite o link:https://www.kaggle.com/uciml/mushroom-classification
+
+#Coletando os dados
+```{r cars}
+#Coletando os dados
+df <- read.csv('C:/DataScience/mushroom/mushrooms.csv')
+
+#Informações sobre o dataset
+str(df)
+```
+#Transformação das variáveis
+```{r}
+#A coluna stalk.root possuí algumas observações com valores "?", inicialmente irei manter essas observações, e se essa variável stalk.root for uma das mais relevantes para a classificação do modelo, trataremos esses valores.
+str(df$stalk.root)
+```
+
+```{r}
+#Verificando valores nulos
+any(is.na(df))
+```
+Precisamos transformar as variáveis em numéricas para o algoritmo
+```{r}
+#Sapply para transformar variáveis factor em numéricas
+dfnum <- as.data.frame(lapply(df, as.numeric))
+str(dfnum)
+```
+
+```{r}
+#Mudando valores e tipo da variável prevista para fator
+dfnum$class <- factor(dfnum$class, levels = c(1, 2), labels = c("Comestível", "Venenoso"))
+```
+##Normalização dos dados
+Muitos algoritmos de classificação exigem que os dados estejam na mesma escala, criamos uma função para normalizar os dados
+```{r}
+#Função para normalização
+dadosnorm <- function(x) {return ((x - min(x)) / (max(x) - min(x)))}
+
+#Aplicando a normalização
+dfnorm <- as.data.frame(lapply(dfnum[2:23], dadosnorm))
+```
+
+```{r}
+#Verificando a normalização
+#Escala original
+summary(dfnum[c('cap.surface','bruises','odor','stalk.shape')])
+#Dataset normalizado
+summary(dfnorm[c('cap.surface','bruises','odor','stalk.shape')])
+```
+```{r}
+#Verificando dados normalizados, observamos que agora existem dados nulos no nosso dataset
+any(is.na(dfnorm))
+
+str(dfnorm)
+
+#Todos os valores da coluna "veil.type" são o mesmo, fazendo com que além de se tornar um valor "nan" após a normalização, não será relevante para a criação do modelo preditivo. 
+table(df$veil.type)
+
+#Eliminando a coluna "veil.type"
+dfnum <- dfnum[-17]
+dfnorm <- dfnorm[-16]
+```
+##Criação do Modelo
+
+Separando dados de treino e de teste:
+```{r}
+#Criando amostras randômicas para dados de treino e de teste (função do pacote caTools)
+set.seed(101) 
+amostra <- sample.split(dfnorm, SplitRatio = 0.70)
+
+# 70% dos dados para treino
+dados_treino = subset(dfnorm, amostra == TRUE)
+dim(dados_treino)
+
+# 30% dos dados para teste
+dados_teste = subset(dfnorm, amostra == FALSE)
+dim(dados_teste)
+
+#Criando labels que serão utilizados para avaliação do modelo
+dados_treino_labels <- subset(dfnum[,1], amostra == TRUE)
+dados_teste_labels <- subset(dfnum[,1], amostra == FALSE)
+```
+#Algoritmo KNN (K-Nearest-Neighbor)
+```{r}
+#Criando o modelo (função do pacote "class")
+modelo <- knn(train = dados_treino, 
+              test = dados_teste,
+              cl = dados_treino_labels, 
+              k = 10)
+
+# Gerando Confusion Matrix (pacote caret)
+confusionMatrix(dados_teste_labels, modelo)
+```
+#Interpretando o resultado do modelo preditivo
+
+A Confusion Matrix gerada nos diz que:
+
+Label Positivo = 1 = Comestível
+
+Label Negativo = 2 = Venenoso
+  
+    -Verdadeiro Negativo:  1291
+  
+    -Falso Negativo: 3
+  
+    -Falso Positivo: 0
+  
+    -Verdadeiro Positivo: 1414
+
+“Accuracy” mede a exatidão do modelo de classificação, é a proporção de resultados verdadeiros em relação ao total de casos analisados. Podemos ver que nosso modelo possuí uma exatidão de 0,9989 (ele acerta 99,89% das previsões), poderíamos realizar tarefas de otimização, criando novas variáveis, coletando mais dados, filtrando valores, alterando o parâmetro “k” no modelo Knn, mas a exatidão encontrada inicialmente está de bom tamanho para o nosso trabalho.
+
+#Classificação sem knn
+Vamos explorar um pouco mais os dados e imaginar a seguinte situação: Se estivéssemos procurando cogumelos numa floresta para nossa próxima refeição sem o auxílio do algoritmo classificador knn, o que fazer?
+
+#Importância das variáveis
+É natural que em um conjunto e dados, algumas características sejam mais relevantes, menos relevantes ou até redundantes para o modelo preditivo. É tarefa importante do Cientista de Dados identificar quais variáveis devem ser consideradas, desconsideradas ou alteradas para alcançar o resultado desejado.
+
+
+```{r}
+#Importância das variáveis para a classificação do modelo (quanto mais para a direita no gráfico, maior a importância da variável)
+importancia<- randomForest( class ~ ., 
+                             data = dfnum, 
+                             ntree = 100, nodesize = 10, importance = T)
+
+varImpPlot(importancia)
+```
+
+Vamos explorar as 4 variáveis mais relevantes para o modelo:
+
+```{r}
+ggplot(df, aes(`spore.print.color`, fill = `class`)) + geom_bar() + labs(title = 'Gráfico de Barras Empilhadas   e = Comestível, p = Venenoso', x = 'spore.print.color', y = 'Contagem de spore.print.color')
+```
+
+Spore.print.color - Esporada
+
+A esporada mostra a cor dos esporos do cogumelo, e é normalmente obtida espalmando a superfície produtora de esporos numa folha de plástico transparente e rígido ou folha de papel. Quando o cogumelo é retirado, a cor dos esporos deverá ser visível.
+
+Podemos observar que a maior parte dos cogumelos venenosos possuem esporada de cor:
+
+     h(chocolate) - Cor chocolate 
+
+     w(white) - Cor branca
+
+
+```{r}
+ggplot(df, aes(`odor`, fill = `class`)) + geom_bar() + labs(title = "Gráfico de Barras Empilhadas   e = Comestível, p = Venenoso'", x = "odor" , y = "Contagem de odors"  )
+```
+
+Odor - Odor
+
+Outra característica importante na classificação do cogumelo é o odor que o fungo possuí.
+
+Podemos observar que a maior parte dos cogumelos venenosos possuem odor:
+   
+   
+     f(foul) - Odor desagradável
+     
+
+```{r}
+ggplot(df, aes(`gill.size`, fill = `class`)) + geom_bar() + labs(title = 'Gráfico de Barras Empilhadas   e = Comestível, p = Venenoso', x = 'gill.size', y = 'Contagem de gill.size')
+```
+
+Gill.size - Tamanho das brânquias
+
+O tamanho das brânquias do cogumelos também devem ser observados.
+
+Podemos observar que proporcionalmente a maior parte dos cogumelos venenosos possuem brânquias:\n
+     
+     n(narrow) - Tamanho estreito
+
+```{r}
+ggplot(df, aes(`ring.number`, fill = `class`)) + geom_bar() + labs(title = 'Gráfico de Barras Empilhadas   e = Comestível, p = Venenoso', x = 'ring.number', y = 'Contagem de ring.number')
+```
+
+Ring.number - Número de anéis
+
+O número de anéis no cogumelo também é uma característica relevante para a nossa classificação.
+
+Podemos observar que a maior parte dos cogumelos venenosos possuem:
+     
+     o(one) - Um anel
+
+
+#Conclusão final
+![](C:/DataScience/mushroom/im02.png)
+
+Resumindo: Se você estiver procurando cogumelos numa floresta para a sua próxima refeição e não possuir o algoritmo knn para te auxiliar nesta tarefa, as características dos cogumelos venenosos que você tem maior probabilidade de encontrar, e que deverá evitar são:
+
+   
+   -Spore = Esporada de cor chocolate ou branca
+   
+   -Odor = Odor desagradável
+   
+   -Gill.size = Brânquias estreitas
+   
+   -Ring.number = Um anel
+
+
+      
+
+
